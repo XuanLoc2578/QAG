@@ -1,25 +1,4 @@
-import torch
-import transformers
-from transformers.models.pegasus.modeling_pegasus import PegasusForCausalLM
 
-
-
-
-# coding=utf-8
-# Copyright 2021, Google and The HuggingFace Inc. team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-""" PyTorch PEGASUS model."""
 
 import copy
 import math
@@ -1145,7 +1124,8 @@ class PegasusDecoder(PegasusPreTrainedModel):
     "The bare PEGASUS Model outputting raw hidden-states without any specific head on top.",
     PEGASUS_START_DOCSTRING,
 )
-class PegasusModel(PegasusPreTrainedModel):
+
+class CustomPegasusModel(PegasusPreTrainedModel):
     def __init__(self, config: PegasusConfig):
         super().__init__(config)
 
@@ -1253,6 +1233,11 @@ class PegasusModel(PegasusPreTrainedModel):
                 return_dict=return_dict,
             )
 
+            #1 reshape input_ids, attention_mask
+            input_ids = input_ids.repeat(4, 1)
+            attention_mask = attention_mask.repeat(4, 1)
+            #1
+
         # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
         elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
@@ -1260,6 +1245,10 @@ class PegasusModel(PegasusPreTrainedModel):
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
+
+        #2 reshape decoder_input_ids theo labels
+        decoder_input_ids = decoder_input_ids.reshape(8, 128)
+        #2
 
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
@@ -1295,7 +1284,7 @@ class PegasusModel(PegasusPreTrainedModel):
 @add_start_docstrings(
     "The PEGASUS Model with a language modeling head. Can be used for summarization.", PEGASUS_START_DOCSTRING
 )
-class PegasusForConditionalGeneration(PegasusPreTrainedModel):
+class CustomPegasusForConditionalGeneration(PegasusPreTrainedModel):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = [
         r"final_logits_bias",
@@ -1307,7 +1296,7 @@ class PegasusForConditionalGeneration(PegasusPreTrainedModel):
 
     def __init__(self, config: PegasusConfig):
         super().__init__(config)
-        self.model = PegasusModel(config)
+        self.model = CustomPegasusModel(config)
         self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
         self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
 
@@ -1398,6 +1387,11 @@ class PegasusForConditionalGeneration(PegasusPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
+
+            #3 reshape lại labels để giống với decoder_input_ids
+            labels = labels.reshape(8, 128)
+            #3
+
             if use_cache:
                 logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
             use_cache = False
@@ -1427,8 +1421,21 @@ class PegasusForConditionalGeneration(PegasusPreTrainedModel):
 
         masked_lm_loss = None
         if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            masked_lm_loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.view(-1))
+            #4 format shape của output của hàm loss (8 * 128)
+            loss_fct = CrossEntropyLoss(size_average=False, reduce=False, reduction='none')
+            #4
+
+            #5 tính loss nhưng không flatten mà giữ nguyên shape của labels và logits
+            labels[labels==-100] = 0
+            labels = F.one_hot(labels, num_classes=50265)
+            labels = torch.transpose(labels, 1, 2)
+            lm_logits = torch.transpose(lm_logits, 1, 2)
+            masked_lm_loss = loss_fct(lm_logits, labels)
+            #5
+
+            #6 reduce mean theo chiều Length, reduce min theo chiều Reference
+
+            #6
 
         if not return_dict:
             output = (lm_logits,) + outputs[1:]
@@ -1486,3 +1493,4 @@ class PegasusForConditionalGeneration(PegasusPreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
             )
         return reordered_past
+
