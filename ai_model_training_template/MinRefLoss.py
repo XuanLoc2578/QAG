@@ -1434,7 +1434,9 @@ class CustomPegasusForConditionalGeneration(PegasusPreTrainedModel):
             #5
 
             #6 reduce mean theo chiều Length, reduce min theo chiều Reference
-
+            masked_lm_loss = masked_lm_loss.mean(2, True).squeeze()
+            masked_lm_loss = torch.min(masked_lm_loss, 1, True)
+            masked_lm_loss = masked_lm_loss.values
             #6
 
         if not return_dict:
