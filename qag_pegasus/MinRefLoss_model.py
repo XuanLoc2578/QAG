@@ -1,4 +1,7 @@
-from Pegasus_source_code import *
+import torch
+from transformers.models.pegasus.modeling_pegasus import *
+
+import torch.nn.functional as F
 
 _CHECKPOINT_FOR_DOC = "google/pegasus-large"
 _CONFIG_FOR_DOC = "PegasusConfig"
@@ -114,11 +117,6 @@ class CustomPegasusModel(PegasusPreTrainedModel):
                 return_dict=return_dict,
             )
 
-            #1 reshape input_ids, attention_mask
-            input_ids = input_ids.repeat(4, 1)
-            attention_mask = attention_mask.repeat(4, 1)
-            #1
-
         # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
         elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
@@ -127,9 +125,11 @@ class CustomPegasusModel(PegasusPreTrainedModel):
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
-        #2 reshape decoder_input_ids theo labels
+        #1 reshape attention_mask, encoder_output[0], decoder_input_ids cho decoder
+        attention_mask = attention_mask.repeat_interleave(4, 1)
+        encoder_outputs[0] = encoder_outputs[0].repeat_interleave(4, 1)
         decoder_input_ids = decoder_input_ids.reshape(8, 128)
-        #2
+        #1
 
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
@@ -269,9 +269,9 @@ class CustomPegasusForConditionalGeneration(PegasusPreTrainedModel):
 
         if labels is not None:
 
-            #3 reshape labels để giống với decoder_input_ids (decoder_input_ids???)
+            #2 reshape labels để giống với decoder_input_ids
             labels = labels.reshape(8, 128)
-            #3
+            #2
 
             if use_cache:
                 logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
@@ -302,24 +302,27 @@ class CustomPegasusForConditionalGeneration(PegasusPreTrainedModel):
 
         masked_lm_loss = None
         if labels is not None:
-            #4 format shape của output của hàm loss để có shape 8x128
+            #3 format shape của output của hàm loss để có shape 8x128
             loss_fct = CrossEntropyLoss(size_average=False, reduce=False, reduction='none')
-            #4
+            #3
 
-            #5 tính loss nhưng không flatten mà giữ nguyên shape của labels và logits
+            #4 tính loss nhưng không flatten mà giữ nguyên shape của labels và logits
             labels[labels==-100] = 0
             labels = F.one_hot(labels, num_classes=50265)
+            lm_logits[labels==0] = 0
             labels = torch.transpose(labels, 1, 2)
             lm_logits = torch.transpose(lm_logits, 1, 2)
             masked_lm_loss = loss_fct(lm_logits, labels)
-            #5
+            #4
 
-            #6 reduce mean theo chiều Length, reduce min theo chiều Reference --> MinRefLoss
+            #5 reduce mean theo chiều Length, reduce min theo chiều Reference --> MinRefLoss
             masked_lm_loss = masked_lm_loss.reshape(2, 4, 128)
-            masked_lm_loss = masked_lm_loss.mean(2, True).squeeze()
+            sum = masked_lm_loss.sum(2, True).squeeze()
+            count = torch.count_nonzero(masked_lm_loss, dim=2)
+            masked_lm_loss = torch.div(sum, count)
             masked_lm_loss = torch.min(masked_lm_loss, 1, True)
             masked_lm_loss = masked_lm_loss.values
-            #6
+            #5
 
         if not return_dict:
             output = (lm_logits,) + outputs[1:]
