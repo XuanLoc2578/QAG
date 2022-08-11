@@ -1,6 +1,6 @@
 import torch
 import transformers
-from transformers.models.pegasus.modeling_pegasus import PegasusForCausalLM
+from transformers.models.pegasus.modeling_pegasus import PegasusForConditionalGeneration
 
 
 
