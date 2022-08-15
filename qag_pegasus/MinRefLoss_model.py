@@ -1,5 +1,6 @@
 import torch
 from transformers.models.pegasus.modeling_pegasus import *
+from typing import Union, Tuple
 
 import torch.nn.functional as F
 
