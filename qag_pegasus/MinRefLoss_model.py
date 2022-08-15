@@ -314,7 +314,7 @@ class CustomPegasusForConditionalGeneration(PegasusPreTrainedModel):
 
             #4 tính loss nhưng không flatten mà giữ nguyên shape của labels và logits
             labels[labels==-100] = 0
-            labels = F.one_hot(labels, num_classes=50265)
+            labels = F.one_hot(labels, num_classes=96104)
             lm_logits[labels==0] = 0
             labels = torch.transpose(labels, 1, 2)
             lm_logits = torch.transpose(lm_logits, 1, 2)
