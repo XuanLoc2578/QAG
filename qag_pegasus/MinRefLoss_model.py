@@ -117,18 +117,18 @@ class CustomPegasusModel(PegasusPreTrainedModel):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
-
+            encoder_outputs[0] = encoder_outputs[0].repeat_interleave(4, 0)
         # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
         elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
-                last_hidden_state=encoder_outputs[0],
+                last_hidden_state=encoder_outputs[0].repeat_interleave(4, 0),
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
         #1 reshape attention_mask, encoder_output[0], decoder_input_ids cho decoder
         attention_mask = attention_mask.repeat_interleave(4, 0)
-        encoder_outputs = encoder_outputs.repeat_interleave(4, 0)
+        # encoder_outputs[0] = encoder_outputs[0]
         decoder_input_ids = decoder_input_ids.reshape(8, -1)
         #1
 
