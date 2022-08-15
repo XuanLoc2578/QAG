@@ -276,7 +276,7 @@ class CustomPegasusForConditionalGeneration(PegasusPreTrainedModel):
         if labels is not None:
 
             #2 reshape labels để giống với decoder_input_ids
-            labels = labels.reshape(8, -1).float()
+            labels = labels.reshape(8, -1)
             #2
 
             if use_cache:
