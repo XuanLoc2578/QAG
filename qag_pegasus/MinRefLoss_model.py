@@ -128,7 +128,7 @@ class CustomPegasusModel(PegasusPreTrainedModel):
 
         #1 reshape attention_mask, encoder_output[0], decoder_input_ids cho decoder
         attention_mask = attention_mask.repeat_interleave(4, 0)
-        encoder_outputs[0] = encoder_outputs[0].repeat_interleave(4, 0)
+        encoder_outputs = encoder_outputs.repeat_interleave(4, 0)
         decoder_input_ids = decoder_input_ids.reshape(8, -1)
         #1
 
