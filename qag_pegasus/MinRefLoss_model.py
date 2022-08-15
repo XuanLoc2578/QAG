@@ -126,9 +126,9 @@ class CustomPegasusModel(PegasusPreTrainedModel):
             )
 
         #1 reshape attention_mask, encoder_output[0], decoder_input_ids cho decoder
-        attention_mask = attention_mask.repeat_interleave(4, 1)
-        encoder_outputs[0] = encoder_outputs[0].repeat_interleave(4, 1)
-        decoder_input_ids = decoder_input_ids.reshape(8, 128)
+        attention_mask = attention_mask.repeat_interleave(4, 0)
+        encoder_outputs[0] = encoder_outputs[0].repeat_interleave(4, 0)
+        decoder_input_ids = decoder_input_ids.reshape(8, -1)
         #1
 
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
@@ -270,7 +270,7 @@ class CustomPegasusForConditionalGeneration(PegasusPreTrainedModel):
         if labels is not None:
 
             #2 reshape labels để giống với decoder_input_ids
-            labels = labels.reshape(8, 128)
+            labels = labels.reshape(8, -1)
             #2
 
             if use_cache:
@@ -316,7 +316,7 @@ class CustomPegasusForConditionalGeneration(PegasusPreTrainedModel):
             #4
 
             #5 reduce mean theo chiều Length, reduce min theo chiều Reference --> MinRefLoss
-            masked_lm_loss = masked_lm_loss.reshape(2, 4, 128)
+            masked_lm_loss = masked_lm_loss.reshape(2, 4, -1)
             sum = masked_lm_loss.sum(2, True).squeeze()
             count = torch.count_nonzero(masked_lm_loss, dim=2)
             masked_lm_loss = torch.div(sum, count)
