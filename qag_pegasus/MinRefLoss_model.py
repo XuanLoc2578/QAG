@@ -328,7 +328,7 @@ class CustomPegasusForConditionalGeneration(PegasusPreTrainedModel):
             count = torch.count_nonzero(masked_lm_loss, dim=2)
             masked_lm_loss = torch.div(sum, count)
             masked_lm_loss = torch.min(masked_lm_loss, 1, True)
-            masked_lm_loss = masked_lm_loss.values
+            masked_lm_loss = masked_lm_loss.values.min()
             #5
 
         if not return_dict:
