@@ -318,6 +318,7 @@ class CustomPegasusForConditionalGeneration(PegasusPreTrainedModel):
             lm_logits[labels==0.0] = 0.0
             labels = torch.transpose(labels, 1, 2)
             lm_logits = torch.transpose(lm_logits, 1, 2)
+            labels = labels.float()
             masked_lm_loss = loss_fct(lm_logits, labels)
             #4
 
