@@ -276,7 +276,7 @@ class CustomPegasusForConditionalGeneration(PegasusPreTrainedModel):
         if labels is not None:
 
             #2 reshape labels để giống với decoder_input_ids
-            labels = labels.reshape(8, -1)
+            labels = labels.reshape(8, -1).float()
             #2
 
             if use_cache:
@@ -313,9 +313,9 @@ class CustomPegasusForConditionalGeneration(PegasusPreTrainedModel):
             #3
 
             #4 tính loss nhưng không flatten mà giữ nguyên shape của labels và logits
-            labels[labels==-100] = 0
+            labels[labels==-100.0] = 0.0
             labels = F.one_hot(labels, num_classes=96104)
-            lm_logits[labels==0] = 0
+            lm_logits[labels==0.0] = 0.0
             labels = torch.transpose(labels, 1, 2)
             lm_logits = torch.transpose(lm_logits, 1, 2)
             masked_lm_loss = loss_fct(lm_logits, labels)
