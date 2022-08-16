@@ -9,7 +9,6 @@ _CONFIG_FOR_DOC = "PegasusConfig"
 _TOKENIZER_FOR_DOC = "PegasusTokenizer"
 
 
-
 class PegasusAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -60,6 +59,10 @@ class PegasusAttention(nn.Module):
 
         bsz, tgt_len, _ = hidden_states.size()
 
+        ##
+        bsz = bsz*2
+        ##
+
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
         # get key, value proj
@@ -97,7 +100,10 @@ class PegasusAttention(nn.Module):
         key_states = key_states.view(*proj_shape)
         value_states = value_states.view(*proj_shape)
 
-        src_len = key_states.size(1)
+        ##
+        src_len = key_states.size(1)//2
+        ##
+
         attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
 
         if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
@@ -107,10 +113,7 @@ class PegasusAttention(nn.Module):
             )
 
         if attention_mask is not None:
-            ##
-            attention_mask = attention_mask.reshape(bsz*2, 1, tgt_len, src_len//2)
-            ##
-            if attention_mask.size() != (bsz*2, 1, tgt_len, src_len//2):
+            if attention_mask.size() != (bsz, 1, tgt_len, src_len):
                 raise ValueError(
                     f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
                 )
