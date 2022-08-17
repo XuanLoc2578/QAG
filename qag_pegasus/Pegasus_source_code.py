@@ -1,6 +1,8 @@
 import torch
 import transformers
 from transformers.models.pegasus.modeling_pegasus import PegasusForConditionalGeneration
+from transformers import tokenization_utils_fast
+
 
 
 

@@ -262,7 +262,7 @@ class CustomPegasusModel(PegasusPreTrainedModel):
 
         #
         input_ids = input_ids.repeat_interleave(4, 0)
-        attention_mask = attention_mask.repeat_interleave(4, 0)
+        attention_mask = attention_mask.repeat_interleave(4, 0).reshape(input_ids.shape)
         #
 
         if encoder_outputs is None:
