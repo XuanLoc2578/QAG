@@ -1,0 +1,15 @@
+# Loại bỏ các file .ipynb
+*.ipynb
+
+# Loại bỏ các file biên dịch
+.ipynb_checkpoints/
+__pycache__/
+.vscode/
+.idea/
+*.egg-info/
+.mypy_cache/
+.pytest_cache/
+.idea/
+
+# Loại bỏ file chứa các dữ liệu tạm
+mounts/

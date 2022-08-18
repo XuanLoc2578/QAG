@@ -1,12 +1,24 @@
 import torch
-from transformers.models.pegasus.modeling_pegasus import *
-from typing import Union, Tuple
-
+from transformers.models.pegasus.modeling_pegasus import (
+    PegasusForConditionalGeneration,
+    PegasusPreTrainedModel,
+    PegasusEncoder,
+    PegasusDecoder,
+    PegasusConfig,
+    shift_tokens_right
+)
+from transformers.modeling_outputs import (
+    BaseModelOutput,
+    Seq2SeqLMOutput,
+    Seq2SeqModelOutput,
+)
+from transformers.utils import logging
+from typing import Union, Tuple, Optional
+from torch import nn
+from torch.nn import CrossEntropyLoss
 import torch.nn.functional as F
 
-_CHECKPOINT_FOR_DOC = "google/pegasus-large"
-_CONFIG_FOR_DOC = "PegasusConfig"
-_TOKENIZER_FOR_DOC = "PegasusTokenizer"
+logger = logging.get_logger(__name__)
 
 
 class CustomPegasusModel(PegasusPreTrainedModel):
@@ -59,8 +71,6 @@ class CustomPegasusModel(PegasusPreTrainedModel):
         """
         return (self.encoder.get_position_embeddings(), self.decoder.get_position_embeddings())
 
-    @add_start_docstrings_to_model_forward(PEGASUS_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -106,11 +116,6 @@ class CustomPegasusModel(PegasusPreTrainedModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        #1
-        input_ids = input_ids.repeat_interleave(4, 0)
-        attention_mask = attention_mask.repeat_interleave(4, 0).reshape(input_ids.shape)
-        #1
-
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
@@ -122,26 +127,27 @@ class CustomPegasusModel(PegasusPreTrainedModel):
                 return_dict=return_dict,
             )
 
-            # encoder_outputs[0] = encoder_outputs[0].repeat_interleave(4, 0)
-
         # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
         elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
-                last_hidden_state=encoder_outputs[0].repeat_interleave(4, 0),
+                last_hidden_state=encoder_outputs[0],
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
-        #2
-        decoder_input_ids = decoder_input_ids.reshape(8, -1)
-        #2
+        n_repeats = int(decoder_input_ids.shape[0] / attention_mask.shape[0])
+        if attention_mask is not None:
+            encoder_attention_mask = attention_mask.repeat_interleave(n_repeats, 0)
+        else:
+            encoder_attention_mask = None
+        encoder_hidden_states = encoder_outputs[0].repeat_interleave(n_repeats, 0)
 
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
-            encoder_hidden_states=encoder_outputs[0],
-            encoder_attention_mask=attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
             head_mask=decoder_head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
@@ -167,9 +173,6 @@ class CustomPegasusModel(PegasusPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    "The PEGASUS Model with a language modeling head. Can be used for summarization.", PEGASUS_START_DOCSTRING
-)
 class CustomPegasusForConditionalGeneration(PegasusPreTrainedModel):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = [
@@ -183,8 +186,10 @@ class CustomPegasusForConditionalGeneration(PegasusPreTrainedModel):
     def __init__(self, config: PegasusConfig):
         super().__init__(config)
         self.model = CustomPegasusModel(config)
-        self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
-        self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
+        self.register_buffer("final_logits_bias", torch.zeros(
+            (1, self.model.shared.num_embeddings)))
+        self.lm_head = nn.Linear(
+            config.d_model, self.model.shared.num_embeddings, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -205,7 +210,8 @@ class CustomPegasusForConditionalGeneration(PegasusPreTrainedModel):
         if new_num_tokens <= old_num_tokens:
             new_bias = self.final_logits_bias[:, :new_num_tokens]
         else:
-            extra_bias = torch.zeros((1, new_num_tokens - old_num_tokens), device=self.final_logits_bias.device)
+            extra_bias = torch.zeros(
+                (1, new_num_tokens - old_num_tokens), device=self.final_logits_bias.device)
             new_bias = torch.cat([self.final_logits_bias, extra_bias], dim=1)
         self.register_buffer("final_logits_bias", new_bias)
 
@@ -229,8 +235,10 @@ class CustomPegasusForConditionalGeneration(PegasusPreTrainedModel):
                 will remove vectors from the end.
         """
         self.config.max_position_embeddings = new_num_position_embeddings
-        self.model.encoder.resize_position_embeddings(new_num_position_embeddings)
-        self.model.decoder.resize_position_embeddings(new_num_position_embeddings)
+        self.model.encoder.resize_position_embeddings(
+            new_num_position_embeddings)
+        self.model.decoder.resize_position_embeddings(
+            new_num_position_embeddings)
 
     def get_position_embeddings(self) -> Tuple[nn.Embedding]:
         """
@@ -238,9 +246,6 @@ class CustomPegasusForConditionalGeneration(PegasusPreTrainedModel):
         """
         return (self.model.encoder.get_position_embeddings(), self.model.decoder.get_position_embeddings())
 
-    @add_start_docstrings_to_model_forward(PEGASUS_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
-    @add_end_docstrings(PEGASUS_GENERATION_EXAMPLE)
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -273,13 +278,11 @@ class CustomPegasusForConditionalGeneration(PegasusPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
-
-            #3 reshape labels để giống với decoder_input_ids
-            labels = labels.reshape(8, -1)
-            #3
-
+            label_shape = labels.shape
+            labels = labels.reshape(-1, label_shape[-1])
             if use_cache:
-                logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
+                logger.warning(
+                    "The `use_cache` argument is changed to `False` since `labels` is provided.")
             use_cache = False
             if decoder_input_ids is None:
                 decoder_input_ids = shift_tokens_right(
@@ -307,28 +310,16 @@ class CustomPegasusForConditionalGeneration(PegasusPreTrainedModel):
 
         masked_lm_loss = None
         if labels is not None:
-            #4 format shape của output của hàm loss để có shape 8x64
-            loss_fct = CrossEntropyLoss(size_average=False, reduce=False, reduction='none')
-            #4
-
-            #5 tính loss nhưng không flatten mà giữ nguyên shape của labels và logits
-            labels[labels==-100.0] = 0.0
-            labels = F.one_hot(labels, num_classes=96104)
-            lm_logits[labels==0.0] = 0.0
-            labels = torch.transpose(labels, 1, 2)
-            lm_logits = torch.transpose(lm_logits, 1, 2)
-            labels = labels.float()
-            masked_lm_loss = loss_fct(lm_logits, labels)
-            #5
-
-            #6 reduce mean theo chiều Length, reduce min theo chiều Reference --> MinRefLoss
-            masked_lm_loss = masked_lm_loss.reshape(2, 4, -1)
-            sum = masked_lm_loss.sum(2, True).squeeze()
-            count = torch.count_nonzero(masked_lm_loss, dim=2)
-            masked_lm_loss = torch.div(sum, count)
-            masked_lm_loss = torch.min(masked_lm_loss, 1, True)
-            masked_lm_loss = masked_lm_loss.values.mean()
-            #6
+            loss_fct = CrossEntropyLoss(reduction='none')
+            labels_mask = torch.where(labels == -100, 0, 1)
+            labels = torch.where(labels == -100, 0, labels)
+            masked_lm_loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.view(-1))
+            masked_lm_loss = masked_lm_loss.reshape(labels_mask.shape)
+            masked_lm_loss *= labels_mask
+            masked_lm_loss = torch.sum(masked_lm_loss, -1) / torch.sum(labels_mask, -1)
+            masked_lm_loss = masked_lm_loss.reshape(label_shape[:-1])
+            masked_lm_loss, indices = torch.min(masked_lm_loss, -1)
+            masked_lm_loss = torch.mean(masked_lm_loss)
 
         if not return_dict:
             output = (lm_logits,) + outputs[1:]
@@ -371,7 +362,8 @@ class CustomPegasusForConditionalGeneration(PegasusPreTrainedModel):
             "head_mask": head_mask,
             "decoder_head_mask": decoder_head_mask,
             "cross_attn_head_mask": cross_attn_head_mask,
-            "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
+            # change this to avoid caching (presumably for debugging)
+            "use_cache": use_cache,
         }
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
@@ -383,7 +375,7 @@ class CustomPegasusForConditionalGeneration(PegasusPreTrainedModel):
         for layer_past in past:
             # cached cross_attention states don't have to be reordered -> they are always the same
             reordered_past += (
-                tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
+                tuple(past_state.index_select(0, beam_idx)
+                      for past_state in layer_past[:2]) + layer_past[2:],
             )
         return reordered_past
-
