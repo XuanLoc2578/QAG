@@ -3,7 +3,7 @@
 python qag_pegasus/run_train.py \
     --model_name_or_path google/pegasus-xsum \
     --cache_dir mounts/models/pegasus-xsum \
-    --output_dir mounts/models/gag_pegasus_mrl_model \
+    --output_dir mounts/models/qag_pegasus_mrl_model \
     --train_file mounts/data/MCQ_Squad_MRL.csv \
     --source_max_token_len 256 \
     --target_max_token_len 64 \

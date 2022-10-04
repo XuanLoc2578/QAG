@@ -135,12 +135,14 @@ class CustomPegasusModel(PegasusPreTrainedModel):
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
+        #1
         n_repeats = int(decoder_input_ids.shape[0] / attention_mask.shape[0])
         if attention_mask is not None:
             encoder_attention_mask = attention_mask.repeat_interleave(n_repeats, 0)
         else:
             encoder_attention_mask = None
         encoder_hidden_states = encoder_outputs[0].repeat_interleave(n_repeats, 0)
+        #1
 
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
@@ -186,10 +188,8 @@ class CustomPegasusForConditionalGeneration(PegasusPreTrainedModel):
     def __init__(self, config: PegasusConfig):
         super().__init__(config)
         self.model = CustomPegasusModel(config)
-        self.register_buffer("final_logits_bias", torch.zeros(
-            (1, self.model.shared.num_embeddings)))
-        self.lm_head = nn.Linear(
-            config.d_model, self.model.shared.num_embeddings, bias=False)
+        self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
+        self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -278,8 +278,10 @@ class CustomPegasusForConditionalGeneration(PegasusPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
+            #2
             label_shape = labels.shape
             labels = labels.reshape(-1, label_shape[-1])
+            #2
             if use_cache:
                 logger.warning(
                     "The `use_cache` argument is changed to `False` since `labels` is provided.")
@@ -309,6 +311,8 @@ class CustomPegasusForConditionalGeneration(PegasusPreTrainedModel):
         lm_logits = self.lm_head(outputs[0]) + self.final_logits_bias
 
         masked_lm_loss = None
+
+        #3
         if labels is not None:
             loss_fct = CrossEntropyLoss(reduction='none')
             labels_mask = torch.where(labels == -100, 0, 1)
@@ -320,6 +324,7 @@ class CustomPegasusForConditionalGeneration(PegasusPreTrainedModel):
             masked_lm_loss = masked_lm_loss.reshape(label_shape[:-1])
             masked_lm_loss, indices = torch.min(masked_lm_loss, -1)
             masked_lm_loss = torch.mean(masked_lm_loss)
+        #3
 
         if not return_dict:
             output = (lm_logits,) + outputs[1:]
