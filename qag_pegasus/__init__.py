@@ -15,6 +15,7 @@ class QAGPegasus:
         text = " ".join(text.split())
         return text
 
+
     def generate_qa(
         self,
         context: str,
