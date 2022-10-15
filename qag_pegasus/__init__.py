@@ -15,6 +15,9 @@ class QAGPegasus:
         text = " ".join(text.split())
         return text
 
+    # def push_to_hub_hgf(self, repo_name: str):
+    #     self.model.push_to_hub()
+    #     self.tokenizer.push_to_hub()
 
     def generate_qa(
         self,

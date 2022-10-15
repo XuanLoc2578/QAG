@@ -21,7 +21,8 @@ class ModelArguments:
         },
     )
     config_file: Optional[str] = field(
-        default=None, metadata={"help": "Path to config file"},
+        default=None,
+        metadata={"help": "Path to config file"},
     )
     tokenizer_name: Optional[str] = field(
         default=None,
@@ -38,7 +39,7 @@ class ModelArguments:
     freeze_encoder: Optional[bool] = field(
         default=False,
         metadata={
-            "help": "Where do you want to store the pretrained models downloaded from huggingface.co"
+            "help": "whether you want to inactivated encoder layers or not"
         },
     )
 
@@ -48,7 +49,8 @@ class DataTrainingArguments:
     """Arguments pertaining to what data we are going to input our model for training and eval."""
 
     train_file: Optional[str] = field(
-        default=None, metadata={"help": "The input training data file (a csv file)."}
+        default=None,
+        metadata={"help": "The input training data file (a csv file)."}
     )
     source_max_token_len: Optional[int] = field(
         default=256,

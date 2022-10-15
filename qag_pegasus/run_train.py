@@ -1,5 +1,7 @@
+from huggingface_hub.fastai_utils import push_to_hub_fastai
 from transformers.trainer_seq2seq import Seq2SeqTrainer
 from transformers.training_args_seq2seq import Seq2SeqTrainingArguments
+# from transformers.training_args import TrainingArguments
 from transformers.models.pegasus.tokenization_pegasus_fast import PegasusTokenizerFast
 from qag_pegasus.min_ref_loss_model import CustomPegasusForConditionalGeneration
 from qag_pegasus.mydatasets import (
@@ -20,6 +22,10 @@ def main():
         (ModelArguments, DataTrainingArguments, Seq2SeqTrainingArguments)
     )
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+    # training_args.output_dir = "QAG_Pegasus"
+    # training_args.push_to_hub = True
+    # training_args.push_to_hub_model_id = "QAG_Pegasus"
+    # training_args.hub_model_id = "QAG_Pegasus"
 
     tokenizer = PegasusTokenizerFast.from_pretrained(
         model_args.model_name_or_path,
@@ -41,8 +47,7 @@ def main():
             param.requires_grad = False
 
     train_df, test_df, val_df = read_and_split_data(data_args.train_file)
-    data_module = SquadDataModule(train_df, val_df, test_df, tokenizer,
-                                  batch_size=training_args.per_device_train_batch_size)
+    data_module = SquadDataModule(train_df, val_df, test_df, tokenizer, batch_size=training_args.per_device_train_batch_size)
     data_module.setup()
 
     trainer = Seq2SeqTrainer(
@@ -52,6 +57,10 @@ def main():
         tokenizer=tokenizer
     )
     trainer.train()
+    # trainer.push_to_hub("QAG_Pegasus", use_auth_token=True)
+    # tokenizer.push_to_hub("QAG_Pegasus", use_auth_token=True)
+    # model.push_to_hub("QAG_Pegasus", use_auth_token=True)
+
     # save model and tokenizer
     model.save_pretrained(training_args.output_dir)
     tokenizer.save_pretrained(training_args.output_dir)
